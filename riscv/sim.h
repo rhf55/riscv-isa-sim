@@ -125,6 +125,7 @@ private:
   // memory-mapped I/O routines
   bool mmio_load(reg_t paddr, size_t len, uint8_t* bytes) override;
   bool mmio_store(reg_t paddr, size_t len, const uint8_t* bytes) override;
+  bool mmio_store_preflight(reg_t paddr, size_t len) override;
   void set_rom();
   void set_pc_to_entry_point();
 
