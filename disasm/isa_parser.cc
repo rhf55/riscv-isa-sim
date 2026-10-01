@@ -176,6 +176,7 @@ static const extension_info_t extension_infos[] = {
   {"zkr", 32 | 64, {EXT_ZKR}},
   {"zic64b", 32 | 64},
   {"zkt", 32 | 64},
+  {"ztt", 32 | 64, {EXT_ZTT}},
   {"smepmp", 32 | 64, {EXT_SMEPMP}},
   {"smpmpdeleg", 32 | 64, {EXT_SMPMPDELEG}},
   {"sspmp", 32 | 64, {EXT_SSPMP, EXT_SMCSRIND, EXT_SSCSRIND}, {"smpmpdeleg", "s"}},
