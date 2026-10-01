@@ -159,6 +159,8 @@ void processor_t::reset()
   mmu->flush_tlb();
   if (any_vector_extensions())
     VU.reset();
+  if (extension_enabled(EXT_ZTT))
+    ZTU.reset();
 
   if (n_pmp > 0) {
     // For backwards compatibility with software that is unaware of PMP,

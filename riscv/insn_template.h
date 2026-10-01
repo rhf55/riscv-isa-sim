@@ -11,4 +11,7 @@
 #include "p_ext_macros.h"
 #include "v_ext_macros.h"
 #include "debug_defines.h"
+#include "ztt_decode.h"
+#include "ztt_execute.h"
+#include "ztt_state.h"
 #include <cassert>
