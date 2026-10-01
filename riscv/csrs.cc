@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "csrs.h"
+#include "ztt_config.h"
 // For processor_t:
 #include "processor.h"
 #include "mmu.h"
@@ -589,6 +590,42 @@ base_status_csr_t::base_status_csr_t(processor_t* const proc, const reg_t addr):
                     | (proc->get_const_xlen() == 32 ? SSTATUS32_SD : SSTATUS64_SD)) {
 }
 
+namespace {
+void verify_ztt_ms_write(processor_t* proc, state_t* state, reg_t old_value,
+                         insn_t insn, bool write)
+{
+  if (!write || !proc->extension_enabled(EXT_ZTT) || !proc->ZTU.owned())
+    return;
+
+  if (!state->v && insn.csr() == CSR_VSSTATUS)
+    return;
+
+  if (proc->get_xlen() == 32 && insn.csr() == CSR_MSTATUSH)
+    return;
+
+  const unsigned funct3 = insn.funct3();
+  if (funct3 != 1 && funct3 != 2 && funct3 != 3 &&
+      funct3 != 5 && funct3 != 6 && funct3 != 7)
+    return;
+
+  const reg_t source = funct3 & 4 ? insn.rs1() : state->XPR[insn.rs1()];
+  reg_t new_value = old_value;
+  switch (funct3 & 3) {
+    case 1: new_value = source; break;
+    case 2: new_value |= source; break;
+    case 3: new_value &= ~source; break;
+  }
+  if ((new_value & ztt::kZttSstatusMs) == 0)
+    throw trap_illegal_instruction(insn.bits());
+}
+}
+
+void base_status_csr_t::verify_permissions(insn_t insn, bool write) const
+{
+  csr_t::verify_permissions(insn, write);
+  verify_ztt_ms_write(proc, state, read(), insn, write);
+}
+
 reg_t base_status_csr_t::compute_sstatus_write_mask() const noexcept {
   // If a configuration has FS bits, they will always be accessible no
   // matter the state of misa.
@@ -602,6 +639,7 @@ reg_t base_status_csr_t::compute_sstatus_write_mask() const noexcept {
     | (proc->any_custom_extensions() ? SSTATUS_XS : 0)
     | (has_vs ? SSTATUS_VS : 0)
     | (proc->extension_enabled(EXT_ZVTBASE) ? SSTATUS_MS : 0)
+    | (proc->extension_enabled(EXT_ZTT) ? ztt::kZttSstatusMs : 0)
     | (proc->extension_enabled('S') && proc->extension_enabled(EXT_ZICFILP) ? SSTATUS_SPELP : 0)
     | (proc->extension_enabled(EXT_SSDBLTRP) ? SSTATUS_SDT : 0)
     ;
@@ -616,6 +654,7 @@ reg_t base_status_csr_t::adjust_sd(const reg_t val) const noexcept {
   if (((val & SSTATUS_FS) == SSTATUS_FS) ||
       ((val & SSTATUS_VS) == SSTATUS_VS) ||
       ((val & SSTATUS_MS) == SSTATUS_MS) ||
+      ((val & ztt::kZttSstatusMs) == ztt::kZttSstatusMs) ||
       ((val & SSTATUS_XS) == SSTATUS_XS)) {
     return val | sd_bit;
   }
@@ -842,6 +881,12 @@ sstatus_csr_t::sstatus_csr_t(processor_t* const proc, sstatus_proxy_csr_t_p orig
   virtualized_csr_t(proc, orig, virt),
   orig_sstatus(orig),
   virt_sstatus(virt) {
+}
+
+void sstatus_csr_t::verify_permissions(insn_t insn, bool write) const
+{
+  csr_t::verify_permissions(insn, write);
+  verify_ztt_ms_write(proc, state, read(), insn, write);
 }
 
 void sstatus_csr_t::dirty(const reg_t dirties) {

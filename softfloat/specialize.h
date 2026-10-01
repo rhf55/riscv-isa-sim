@@ -41,7 +41,7 @@
 | The bit pattern for a default generated 8-bit floating-point NaN.
 *----------------------------------------------------------------------------*/
 #define defaultNaNE4M3 0x7F
-#define defaultNaNE5M2 0x7F
+#define defaultNaNE5M2 0x7E
 
 /*----------------------------------------------------------------------------
 | Assuming `uiA' has the bit pattern of a 8-bit floating-point NaN, converts
