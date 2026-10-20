@@ -94,4 +94,3 @@ run_test_script="$ROOT"/ci-tests/run-snippy-test.sh
   "$CONFIGDIR"/boot-code.s riscv64 rv64ia_zicsr_zifencei_zawrs "zawrs + zalrsc" lp64 "$SPIKE_PATH"
 "$run_test_script" "$ROOT" 3000 \
   "$CONFIGDIR"/boot-code.s riscv32 rv32ia_zicsr_zifencei_zawrs "zawrs + zalrsc" ilp32 "$SPIKE_PATH"
-
