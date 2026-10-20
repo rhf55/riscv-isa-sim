@@ -5,10 +5,10 @@ name: Debug Quick Test
 on:
   push:
     branches:
-      - master
+      - ztt-v0.6-dev
   pull_request:
     branches:
-      - master
+      - ztt-v0.6-dev
 
 jobs:
   test:
@@ -16,13 +16,21 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v2
-        with:
-          submodules: recursive
 
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo xargs apt-get install -y < .github/workflows/apt-packages.txt
+
+      - name: Initialize pinned core-math submodule
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          git submodule update --init core-math
+          expected="$(git rev-parse HEAD:core-math)"
+          actual="$(git -C core-math rev-parse HEAD)"
+          test "$actual" = "$expected"
+          printf 'core-math: %s\n' "$actual"
 
       - name: Download OpenOCD
         run: |

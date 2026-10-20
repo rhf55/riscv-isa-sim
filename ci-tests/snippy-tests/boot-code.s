@@ -27,4 +27,3 @@ tohost:
 .8byte 0x0
 fromhost:
 .8byte 0x0
-
