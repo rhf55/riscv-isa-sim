@@ -14,7 +14,9 @@ mkdir $INSTALL $BUILD
 # build spike
 mkdir $BUILD/spike
 cd $BUILD/spike
-$ROOT/configure --prefix=$INSTALL
+CFLAGS="-Werror -Wall -Wextra -Wvla"
+CXXFLAGS="-Wnon-virtual-dtor $CFLAGS"
+CXXFLAGS="$CXXFLAGS" CFLAGS="$CFLAGS" $ROOT/configure --prefix=$INSTALL
 make -j$NPROCS
 make check
 make install install-hdrs-list.h
