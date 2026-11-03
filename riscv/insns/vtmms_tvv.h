@@ -11,7 +11,7 @@ if (P.VU.vsew == 8 && P.VU.widen == 4 && !P.VU.altfmt) {
   ({
     auto a = P.VU.mt_vector<int8_t>(insn.rs2(), m);
     auto b = P.VU.mt_vector<uint8_t>(insn.rs1(), n);
-  
+
     P.VU.mt_elt<int32_t>(td, m, n) += dot_product<int32_t>(a.data(), b.data(), P.VU.tk);
   })
 } else if (P.VU.vsew == 8 && P.VU.widen == 4 && P.VU.altfmt) {
@@ -21,7 +21,7 @@ if (P.VU.vsew == 8 && P.VU.widen == 4 && !P.VU.altfmt) {
   ({
     auto a = P.VU.mt_vector<int8_t>(insn.rs2(), m);
     auto b = P.VU.mt_vector<int8_t>(insn.rs1(), n);
-  
+
     P.VU.mt_elt<int32_t>(td, m, n) += dot_product<int32_t>(a.data(), b.data(), P.VU.tk);
   })
 } else {

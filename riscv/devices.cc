@@ -1,6 +1,3 @@
-// Copyright (c) 2026 BOSC & ICT, CAS
-// All rights reserved.
-// See LICENSE for license details.
 #include "devices.h"
 #include "mmu.h"
 #include <stdexcept>
