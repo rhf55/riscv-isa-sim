@@ -1,6 +1,3 @@
-// Copyright (c) 2026 BOSC & ICT, CAS
-// All rights reserved.
-// See LICENSE for license details.
 #ifndef _RISCV_DEVICES_H
 #define _RISCV_DEVICES_H
 
@@ -100,8 +97,7 @@ class clint_t : public abstract_device_t {
   clint_t(const simif_t*, uint64_t freq_hz, bool real_time);
   bool load(reg_t addr, size_t len, uint8_t* bytes) override;
   bool store(reg_t addr, size_t len, const uint8_t* bytes) override;
-  bool store_preflight(reg_t addr, size_t len) override
-    { return len <= 8 && addr + len >= addr && addr + len <= CLINT_SIZE; }
+  bool store_preflight(reg_t addr, size_t len) override;
   reg_t size() override { return CLINT_SIZE; }
   void tick(reg_t rtc_ticks) override;
   uint64_t get_mtimecmp(reg_t hartid) { return mtimecmp[hartid]; }
@@ -141,6 +137,9 @@ class plic_t : public abstract_device_t, public abstract_interrupt_controller_t 
   plic_t(const simif_t*, uint32_t ndev);
   bool load(reg_t addr, size_t len, uint8_t* bytes) override;
   bool store(reg_t addr, size_t len, const uint8_t* bytes) override;
+  // Valid word stores and failing holes both exist, and an 8-byte store is
+  // two separate writes.  There is no single side-effect-free promise.
+  bool store_preflight(reg_t, size_t) override { return false; }
   void set_interrupt_level(uint32_t id, int lvl) override;
   reg_t size() override { return PLIC_SIZE; }
  private:
@@ -172,6 +171,8 @@ class aplic_t : public abstract_device_t, public abstract_interrupt_controller_t
   aplic_t(const simif_t*, aplic_t *parent);
   bool load(reg_t addr, size_t len, uint8_t* bytes) override;
   bool store(reg_t addr, size_t len, const uint8_t* bytes) override;
+  // MSI generation can assert, so a preflight cannot promise a later commit.
+  bool store_preflight(reg_t, size_t) override { return false; }
   void set_interrupt_level(uint32_t id, int lvl) override;
   reg_t size() override { return APLIC_SIZE; }
   void set_child(aplic_t *c) { child = c; }
@@ -214,8 +215,7 @@ class ns16550_t : public abstract_device_t {
             uint32_t interrupt_id, uint32_t reg_shift, uint32_t reg_io_width);
   bool load(reg_t addr, size_t len, uint8_t* bytes) override;
   bool store(reg_t addr, size_t len, const uint8_t* bytes) override;
-  bool store_preflight(reg_t addr, size_t len) override
-    { return len == reg_io_width && addr + len >= addr && addr + len <= NS16550_SIZE; }
+  bool store_preflight(reg_t addr, size_t len) override;
   void tick(reg_t rtc_ticks) override;
   reg_t size() override { return NS16550_SIZE; }
  private:

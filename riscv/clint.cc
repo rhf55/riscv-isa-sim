@@ -99,6 +99,22 @@ bool clint_t::store(reg_t addr, size_t len, const uint8_t* bytes)
   return true;
 }
 
+bool clint_t::store_preflight(reg_t addr, size_t len)
+{
+  if (len == 0 || len > 8 || addr + len < addr || addr + len > CLINT_SIZE)
+    return false;
+
+  // An aligned MSIP store wider than one word reaches write_little_endian_reg
+  // with a 32-bit destination and aborts.  Double-word stores are split.
+  if (addr < MTIMECMP_BASE) {
+    if (len == sizeof(mtime_t))
+      return store_preflight(addr, 4) && store_preflight(addr + 4, 4);
+    if (addr % sizeof(msip_t) == 0 && len > sizeof(msip_t))
+      return false;
+  }
+  return true;
+}
+
 void clint_t::tick(reg_t rtc_ticks)
 {
   if (real_time) {

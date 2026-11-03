@@ -1,5 +1,3 @@
-// Copyright (c) 2026 BOSC & ICT, CAS
-// All rights reserved.
 // See LICENSE for license details.
 #ifndef _RISCV_CSRS_H
 #define _RISCV_CSRS_H
@@ -240,7 +238,7 @@ class base_status_csr_t: public csr_t {
  public:
   base_status_csr_t(processor_t* const proc, const reg_t addr);
 
-  virtual void verify_permissions(insn_t insn, bool write) const override;
+  void verify_permissions(insn_t insn, bool write) const override;
 
   bool field_exists(const reg_t which) {
     return (sstatus_write_mask & which) != 0;
@@ -354,7 +352,7 @@ class sstatus_csr_t: public virtualized_csr_t {
  public:
   sstatus_csr_t(processor_t* const proc, sstatus_proxy_csr_t_p orig, vsstatus_csr_t_p virt);
 
-  virtual void verify_permissions(insn_t insn, bool write) const override;
+  void verify_permissions(insn_t insn, bool write) const override;
 
   // Set FS, VS, or XS bits to dirty
   void dirty(const reg_t dirties);

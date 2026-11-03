@@ -226,6 +226,14 @@ bool ns16550_t::load(reg_t addr, size_t len, uint8_t* bytes)
   return ret;
 }
 
+bool ns16550_t::store_preflight(reg_t addr, size_t len)
+{
+  if (len == 0 || len != reg_io_width || addr + len < addr)
+    return false;
+  // store() rejects accesses above PGSIZE before decoding the register.
+  return addr + len <= NS16550_SIZE && addr + len <= PGSIZE;
+}
+
 bool ns16550_t::store(reg_t addr, size_t len, const uint8_t* bytes)
 {
   uint8_t val;
