@@ -32,6 +32,9 @@ class imsic_mmio_t : public abstract_device_t {
   imsic_mmio_t(imsic_file_t_p const imsic);
   bool load(reg_t addr, size_t len, uint8_t* bytes) override;
   bool store(reg_t addr, size_t len, const uint8_t* bytes) override;
+  // Word stores pend interrupts.  Byte stores are rejected by the device,
+  // which is also the access width used by multi-address Ztt stores.
+  bool store_preflight(reg_t, size_t) override { return false; }
   reg_t size() override { return IMSIC_MMIO_PAGE_SIZE; }
 
  private:
