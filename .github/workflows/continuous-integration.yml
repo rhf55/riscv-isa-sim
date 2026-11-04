@@ -3,9 +3,9 @@ name: Continuous Integration
 
 on:
   push:
-    branches: [ztt-v0.6-dev]
+    branches: [ztt-follow-master]
   pull_request:
-    branches: [ztt-v0.6-dev]
+    branches: [ztt-follow-master]
     types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
 
@@ -81,16 +81,20 @@ jobs:
             sudo xargs apt-get install -y < .github/workflows/apt-packages.txt
           } 2>&1 | tee "$CI_WORKDIR/dependencies.log"
 
-      - name: Initialize pinned core-math submodule
+      - name: Initialize pinned core-math and SoftFloat submodules
         timeout-minutes: 12
         run: |
           set -euo pipefail
           {
-            git submodule update --init core-math
+            git submodule update --init core-math berkeley-softfloat-3
             expected="$(git rev-parse HEAD:core-math)"
             actual="$(git -C core-math rev-parse HEAD)"
             test "$actual" = "$expected"
             printf 'core-math: %s\n' "$actual"
+            expected_softfloat="$(git rev-parse HEAD:berkeley-softfloat-3)"
+            actual_softfloat="$(git -C berkeley-softfloat-3 rev-parse HEAD)"
+            test "$actual_softfloat" = "$expected_softfloat"
+            printf 'berkeley-softfloat-3: %s\n' "$actual_softfloat"
           } 2>&1 | tee "$CI_WORKDIR/core-math.log"
 
       # Test the checked-out revision; the upstream commit loop can be empty on push.
@@ -181,16 +185,20 @@ jobs:
           "$llvm_prefix/bin/clang" --version
           "$llvm_prefix/bin/clang++" --version
 
-      - name: Initialize pinned core-math submodule
+      - name: Initialize pinned core-math and SoftFloat submodules
         timeout-minutes: 12
         run: |
           set -euo pipefail
           {
-            git submodule update --init core-math
+            git submodule update --init core-math berkeley-softfloat-3
             expected="$(git rev-parse HEAD:core-math)"
             actual="$(git -C core-math rev-parse HEAD)"
             test "$actual" = "$expected"
             printf 'core-math: %s\n' "$actual"
+            expected_softfloat="$(git rev-parse HEAD:berkeley-softfloat-3)"
+            actual_softfloat="$(git -C berkeley-softfloat-3 rev-parse HEAD)"
+            test "$actual_softfloat" = "$expected_softfloat"
+            printf 'berkeley-softfloat-3: %s\n' "$actual_softfloat"
           } 2>&1 | tee "$CI_WORKDIR/core-math.log"
 
       - name: Build Spike and run unit tests

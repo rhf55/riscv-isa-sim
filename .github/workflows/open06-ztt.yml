@@ -3,7 +3,7 @@ name: open06 Ztt regression
 on:
   workflow_dispatch:
   pull_request:
-    branches: [ztt-v0.6-dev]
+    branches: [ztt-follow-master]
     types: [opened, synchronize, ready_for_review]
 
 permissions:
