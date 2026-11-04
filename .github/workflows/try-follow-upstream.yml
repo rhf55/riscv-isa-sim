@@ -1,0 +1,93 @@
+name: Try rebasing ZTT onto official Spike
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: try-follow-upstream
+  cancel-in-progress: false
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout ZTT branch
+        uses: actions/checkout@v4
+        with:
+          ref: ztt-follow-master
+          fetch-depth: 0
+          submodules: false
+
+      - name: Fetch official Spike
+        run: |
+          git remote add official https://github.com/riscv-software-src/riscv-isa-sim.git
+          git fetch official master
+
+      - name: Prepare candidate branch
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source=$(git rev-parse HEAD)
+          upstream=$(git rev-parse official/master)
+          base=$(git merge-base HEAD official/master)
+          candidate="experiment/ztt-upstream-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$candidate"
+
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "upstream=$upstream" >> "$GITHUB_OUTPUT"
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## 同步试验"
+            echo "- 原 ZTT 版本：$source"
+            echo "- 原官方底座：$base"
+            echo "- 本次官方版本：$upstream"
+            echo "- 候选分支：$candidate"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Reapply contributions onto official version
+        env:
+          BASE: ${{ steps.prepare.outputs.base }}
+          UPSTREAM: ${{ steps.prepare.outputs.upstream }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git rebase --reapply-cherry-picks --empty=keep \
+              --onto "$UPSTREAM" "$BASE"; then
+            echo "贡献提交已重新应用。尚未进行编译或运行测试。" \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## 自动应用失败"
+              echo "远程 ztt-follow-master 未修改。请查看日志并在服务器处理。"
+              echo '```text'
+              git status --short
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Publish candidate branch
+        env:
+          CANDIDATE: ${{ steps.prepare.outputs.candidate }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin "HEAD:refs/heads/$CANDIDATE"
+          {
+            echo "## 候选分支已创建"
+            echo "[$CANDIDATE](https://github.com/${GITHUB_REPOSITORY}/tree/$CANDIDATE)"
+            echo ""
+            echo "仅表示 Git 自动应用成功，不代表编译和运行测试通过。"
+            echo "ztt-follow-master 保持不变。"
+          } >> "$GITHUB_STEP_SUMMARY"
