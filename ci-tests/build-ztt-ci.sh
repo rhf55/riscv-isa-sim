@@ -101,6 +101,24 @@ if [[ "$actual_core_math" != "$expected_core_math" ]]; then
   exit 2
 fi
 
+# Newer Spike cores use the pinned Berkeley SoftFloat submodule.
+expected_softfloat="$(
+  git -C "$ROOT" ls-tree HEAD berkeley-softfloat-3 | awk '$2 == "commit" { print $3 }'
+)"
+if [[ ! "$expected_softfloat" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "source checkout has no valid berkeley-softfloat-3 gitlink" >&2
+  exit 2
+fi
+git -C "$ROOT" submodule sync -- berkeley-softfloat-3
+git -C "$ROOT" submodule update --init -- berkeley-softfloat-3
+actual_softfloat="$(git -C "$ROOT/berkeley-softfloat-3" rev-parse HEAD)"
+if [[ "$actual_softfloat" != "$expected_softfloat" ]]; then
+  echo "berkeley-softfloat-3 checkout does not match the source gitlink" >&2
+  echo "expected: $expected_softfloat" >&2
+  echo "actual: $actual_softfloat" >&2
+  exit 2
+fi
+
 BUILD_DIR="$BUILD_ROOT/build"
 INSTALL_DIR="$BUILD_ROOT/install"
 mkdir -p "$BUILD_DIR/spike" "$INSTALL_DIR"
@@ -117,6 +135,7 @@ fi
   echo "build_root=$BUILD_ROOT"
   echo "jobs=$JOBS"
   echo "submodule_core_math=$(git -C "$ROOT/core-math" rev-parse HEAD 2>/dev/null || echo unavailable)"
+  echo "submodule_berkeley_softfloat_3=$actual_softfloat"
 } | tee "$BUILD_ROOT/build-metadata.env"
 
 (
