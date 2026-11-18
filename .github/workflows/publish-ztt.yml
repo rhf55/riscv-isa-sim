@@ -1,0 +1,197 @@
+name: Publish verified ZTT candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: "同步开始时正式分支的完整 SHA（不得临时改成最新值）"
+        required: true
+        type: string
+      candidate_branch:
+        description: "已测试的候选分支，例如 experiment/ztt-upstream-运行编号-1"
+        required: true
+        type: string
+      candidate_sha:
+        description: "实际测试通过的候选完整 SHA"
+        required: true
+        type: string
+      ci_run_id:
+        description: "候选分支 ZTT Continuous Integration 成功运行的数字 ID"
+        required: true
+        type: string
+      open06_run_id:
+        description: "候选分支 open06 Ztt regression 成功运行的数字 ID"
+        required: true
+        type: string
+      dry_run:
+        description: "仅检查，不发布（取消勾选才更新正式分支）"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: publish-ztt-follow-master
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'rhf55/riscv-isa-sim'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      CANDIDATE_BRANCH: ${{ inputs.candidate_branch }}
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      CI_RUN_ID: ${{ inputs.ci_run_id }}
+      OPEN06_RUN_ID: ${{ inputs.open06_run_id }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Validate publication request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/ztt-follow-master
+          # Execute the publisher from precisely the recorded formal version.
+          # Never execute a publisher supplied by the candidate branch.
+          test "$GITHUB_SHA" = "$SOURCE_SHA"
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$SOURCE_SHA" != "$CANDIDATE_SHA"
+          [[ "$CI_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$OPEN06_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$CANDIDATE_BRANCH" == experiment/ztt-* ]]
+          git check-ref-format "refs/heads/$CANDIDATE_BRANCH"
+          [[ "$DRY_RUN" == true || "$DRY_RUN" == false ]]
+
+      - name: Checkout trusted formal version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          submodules: false
+
+      - name: Verify branch identities and linear history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            "+refs/heads/ztt-follow-master:refs/remotes/publish/source" \
+            "+refs/heads/$CANDIDATE_BRANCH:refs/remotes/publish/candidate"
+          test "$(git rev-parse refs/remotes/publish/source)" = "$SOURCE_SHA"
+          test "$(git rev-parse refs/remotes/publish/candidate)" = "$CANDIDATE_SHA"
+          git cat-file -e "$SOURCE_SHA^{commit}"
+          git cat-file -e "$CANDIDATE_SHA^{commit}"
+          git fetch --no-tags https://github.com/riscv-software-src/riscv-isa-sim.git \
+            "+refs/heads/master:refs/remotes/publish/official"
+          source_base="$(git merge-base "$SOURCE_SHA" refs/remotes/publish/official)"
+          candidate_base="$(git merge-base "$CANDIDATE_SHA" refs/remotes/publish/official)"
+          # A newer official tip arriving during testing need not invalidate
+          # a tested candidate, but moving backwards is forbidden.
+          git merge-base --is-ancestor "$source_base" "$candidate_base"
+          test -z "$(git rev-list --merges "$candidate_base..$CANDIDATE_SHA")"
+          test "$(git rev-list --count "$candidate_base..$CANDIDATE_SHA")" -gt 0
+          # Do not publish a candidate that weakens test/publisher definitions
+          # or removes this button. Intentional policy changes need review first.
+          for workflow in publish-ztt.yml ztt-ci.yml open06-ztt.yml; do
+            path=".github/workflows/$workflow"
+            git cat-file -e "$SOURCE_SHA:$path"
+            git cat-file -e "$CANDIDATE_SHA:$path"
+            git diff --exit-code "$SOURCE_SHA" "$CANDIDATE_SHA" -- "$path"
+          done
+
+      - name: Verify tests for the exact candidate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const sha = process.env.CANDIDATE_SHA;
+            const branch = process.env.CANDIDATE_BRANCH;
+            const checks = [
+              {
+                id: process.env.CI_RUN_ID,
+                path: ".github/workflows/ztt-ci.yml",
+                jobs: ["Test Spike build (Ubuntu)", "Test Spike build (MacOS)"],
+              },
+              {
+                id: process.env.OPEN06_RUN_ID,
+                path: ".github/workflows/open06-ztt.yml",
+                jobs: [
+                  "Build Spike on open06",
+                  ...Array.from({length: 6}, (_, i) => `open06 group ${i}`),
+                  "Aggregate open06 regression",
+                ],
+              },
+            ];
+            for (const check of checks) {
+              const {data: run} = await github.rest.actions.getWorkflowRun({
+                owner, repo, run_id: check.id,
+              });
+              const {data: workflow} = await github.rest.actions.getWorkflow({
+                owner, repo, workflow_id: run.workflow_id,
+              });
+              if (run.repository?.full_name !== `${owner}/${repo}` ||
+                  run.head_repository?.full_name !== `${owner}/${repo}` ||
+                  run.head_sha !== sha || run.head_branch !== branch ||
+                  run.event !== "workflow_dispatch" ||
+                  run.path !== check.path || workflow.path !== check.path ||
+                  run.status !== "completed" || run.conclusion !== "success") {
+                throw new Error(`Run ${check.id} is not a successful manual candidate test for ${sha}.`);
+              }
+              const jobs = await github.paginate(
+                github.rest.actions.listJobsForWorkflowRunAttempt,
+                {owner, repo, run_id: check.id, attempt_number: run.run_attempt, per_page: 100},
+              );
+              if (jobs.length !== check.jobs.length ||
+                  jobs.some(job => job.status !== "completed" ||
+                    job.conclusion !== "success" || job.head_sha !== sha) ||
+                  check.jobs.some(name => jobs.filter(job => job.name === name).length !== 1)) {
+                throw new Error(`Run ${check.id} has missing, skipped, duplicate, or unsuccessful required jobs.`);
+              }
+              core.info(`Verified ${run.html_url} (attempt ${run.run_attempt}, SHA ${sha})`);
+              await core.summary.addRaw(`- Verified tests: ${run.html_url}\n`).write();
+            }
+
+      - name: Back up and publish with exact leases
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Recheck immediately before publishing. The lease also closes the
+          # race between this check and the remote ref update.
+          remote_source="$(git ls-remote --exit-code origin refs/heads/ztt-follow-master | awk '{print $1}')"
+          remote_candidate="$(git ls-remote --exit-code origin "refs/heads/$CANDIDATE_BRANCH" | awk '{print $1}')"
+          test "$remote_source" = "$SOURCE_SHA"
+          test "$remote_candidate" = "$CANDIDATE_SHA"
+          backup="backup/ztt-before-publish-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [[ "$DRY_RUN" == true ]]; then
+            {
+              echo "## 检查通过，未修改任何远端分支"
+              echo "- 正式版本：$SOURCE_SHA"
+              echo "- 候选版本：$CANDIDATE_SHA"
+              echo "- 再次运行并取消 dry_run 勾选才会发布。"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Atomic transaction: both the backup creation and formal update
+          # succeed, or neither happens. Never overwrite an existing backup.
+          git push --atomic \
+            "--force-with-lease=refs/heads/ztt-follow-master:$SOURCE_SHA" \
+            "--force-with-lease=refs/heads/$backup:" \
+            origin \
+            "$SOURCE_SHA:refs/heads/$backup" \
+            "$CANDIDATE_SHA:refs/heads/ztt-follow-master"
+          test "$(git ls-remote --exit-code origin refs/heads/ztt-follow-master | awk '{print $1}')" = "$CANDIDATE_SHA"
+          test "$(git ls-remote --exit-code origin "refs/heads/$backup" | awk '{print $1}')" = "$SOURCE_SHA"
+          {
+            echo "## 正式分支已发布"
+            echo "- 仓库：$GITHUB_REPOSITORY"
+            echo "- 正式分支：ztt-follow-master"
+            echo "- 原提交：$SOURCE_SHA"
+            echo "- 已验证的新提交：$CANDIDATE_SHA"
+            echo "- 备份分支：$backup"
+            echo "- 候选分支保留，不自动删除。master 未修改。"
+            echo "- 本次使用 GITHUB_TOKEN 推送，不会自动触发 push CI；上面已核验同一 SHA 的手动测试。"
+          } >> "$GITHUB_STEP_SUMMARY"
